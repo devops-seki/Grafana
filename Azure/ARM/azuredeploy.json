@@ -1,0 +1,272 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {},
+  "parameters": {
+    "vmName": {
+      "type": "string",
+      "defaultValue": "GrafanaVM",
+      "metadata": {
+        "description": "The name of you Virtual Machine."
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "azureuser",
+      "metadata": {
+        "description": "Username for the Virtual Machine."
+      }
+    },
+    "authenticationType": {
+      "type": "string",
+      "defaultValue": "password",
+      "allowedValues": [
+        "sshPublicKey",
+        "password"
+      ],
+      "metadata": {
+        "description": "Type of authentication to use on the Virtual Machine. SSH key is recommended."
+      }
+    },
+    "adminPasswordOrKey": {
+      "type": "secureString",
+      "metadata": {
+        "description": "SSH Key or password for the Virtual Machine. SSH key is recommended."
+      }
+    },
+    "dnsLabelPrefix": {
+      "type": "string",
+      "defaultValue": "[toLower(format('{0}-{1}', parameters('vmName'), uniqueString(resourceGroup().id)))]",
+      "metadata": {
+        "description": "Unique DNS Name for the Public IP used to access the Virtual Machine."
+      }
+    },
+    "ubuntuOSVersion": {
+      "type": "string",
+      "defaultValue": "18.04-LTS",
+      "metadata": {
+        "description": "The Ubuntu version for the VM. This will pick a fully patched image of this given Ubuntu version."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for all resources."
+      }
+    },
+    "vmSize": {
+      "type": "string",
+      "defaultValue": "Standard_B2s",
+      "metadata": {
+        "description": "The size of the VM"
+      }
+    },
+    "virtualNetworkName": {
+      "type": "string",
+      "defaultValue": "grafana-vNet-arm",
+      "metadata": {
+        "description": "Name of the VNET"
+      }
+    },
+    "subnetName": {
+      "type": "string",
+      "defaultValue": "grafana-Subnet-arm",
+      "metadata": {
+        "description": "Name of the subnet in the virtual network"
+      }
+    },
+    "networkSecurityGroupName": {
+      "type": "string",
+      "defaultValue": "grafana-SGNet-arm",
+      "metadata": {
+        "description": "Name of the Network Security Group"
+      }
+    },
+    "resourceTags": {
+      "type": "object",
+      "defaultValue": {
+        "Project": "Monitoring"
+      }
+    }
+  },
+  "variables": {
+    "publicIPAddressName": "[format('{0}PublicIP', parameters('vmName'))]",
+    "networkInterfaceName": "[format('{0}NetInt', parameters('vmName'))]",
+    "osDiskType": "Standard_LRS",
+    "subnetAddressPrefix": "10.1.0.0/24",
+    "addressPrefix": "10.1.0.0/16",
+    "linuxConfiguration": {
+      "disablePasswordAuthentication": true,
+      "ssh": {
+        "publicKeys": [
+          {
+            "path": "[format('/home/{0}/.ssh/authorized_keys', parameters('adminUsername'))]",
+            "keyData": "[parameters('adminPasswordOrKey')]"
+          }
+        ]
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "apiVersion": "2020-11-01",
+      "name": "[variables('networkInterfaceName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('resourceTags')]",
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName'))]"
+              },
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddressName'))]"
+              }
+            }
+          }
+        ],
+        "networkSecurityGroup": {
+          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroupName'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('networkSecurityGroupName'))]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddressName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('subnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2020-11-01",
+      "name": "[parameters('networkSecurityGroupName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('resourceTags')]",
+      "properties": {
+        "securityRules": [
+          {
+            "name": "HTTP",
+            "properties": {
+              "priority": 1000,
+              "protocol": "Tcp",
+              "access": "Allow",
+              "direction": "Inbound",
+              "sourceAddressPrefix": "*",
+              "sourcePortRange": "*",
+              "destinationAddressPrefix": "*",
+              "destinationPortRange": "80"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2020-11-01",
+      "name": "[parameters('virtualNetworkName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('addressPrefix')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks/subnets",
+      "apiVersion": "2020-11-01",
+      "name": "[format('{0}/{1}', parameters('virtualNetworkName'), parameters('subnetName'))]",
+      "properties": {
+        "addressPrefix": "[variables('subnetAddressPrefix')]",
+        "privateEndpointNetworkPolicies": "Enabled",
+        "privateLinkServiceNetworkPolicies": "Enabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2020-11-01",
+      "name": "[variables('publicIPAddressName')]",
+      "tags": "[parameters('resourceTags')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static",
+        "publicIPAddressVersion": "IPv4",
+        "dnsSettings": {
+          "domainNameLabel": "[parameters('dnsLabelPrefix')]"
+        },
+        "idleTimeoutInMinutes": 4
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2021-11-01",
+      "name": "[parameters('vmName')]",
+      "tags": "[parameters('resourceTags')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "userData": "IyEvYmluL2Jhc2gKCiMjIyBJZiB5b3UgYXJlIHJ1bmluZyBqdXN0IGEgYmFzaCBzY3JpcHQgbWFrZSBzaHVyZSB0byBjaGFuZ2UgRE5TIG5hbWVzCkROUzE9ImV4YW1wbGUxLmNvbSIKRE5TMj0iZXhhbXBsZTIuY29tIiAjIG9wdGlvbmFsCkROUzM9ImV4YW1wbGUzLmNvbSIgIyBvcHRpb25hbApETlM0PSJleGFtcGxlNC5jb20iICMgb3B0aW9uYWwKIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIwoKYXB0IHVwZGF0ZSAteQphcHQgaW5zdGFsbCB3Z2V0IGN1cmwgZ2l0IGRvY2tlci5pbyAteQpjdXJsIC1MIGh0dHBzOi8vZ2l0aHViLmNvbS9kb2NrZXIvY29tcG9zZS9yZWxlYXNlcy9sYXRlc3QvZG93bmxvYWQvZG9ja2VyLWNvbXBvc2UtJCh1bmFtZSAtcyktJCh1bmFtZSAtbSkgLW8gL3Vzci9sb2NhbC9iaW4vZG9ja2VyLWNvbXBvc2UKY2htb2QgK3ggL3Vzci9sb2NhbC9iaW4vZG9ja2VyLWNvbXBvc2UKbG4gLXMgL3Vzci9sb2NhbC9iaW4vZG9ja2VyLWNvbXBvc2UgL3Vzci9iaW4vZG9ja2VyLWNvbXBvc2UKbmV3Z3JwIGRvY2tlcgp1c2VyYWRkIC1nIGRvY2tlciAtcyAvdXNyL2Jpbi9iYXNoIC1tIGRvY2tlcgp1c2VybW9kIC1hIC1HIGRvY2tlciBhenVyZXVzZXIKc3lzdGVtY3RsIGVuYWJsZSBkb2NrZXIuc2VydmljZQpzeXN0ZW1jdGwgc3RhcnQgZG9ja2VyLnNlcnZpY2UKbWtkaXIgLXAgL2hvbWUvYXp1cmV1c2VyL2RvY2tlci9ncmFmYW5hL3twcm92aXNpb25pbmcsZGFzaGJvYXJkc30KbWtkaXIgLXAgL2hvbWUvYXp1cmV1c2VyL2RvY2tlci9ncmFmYW5hL3Byb3Zpc2lvbmluZy97ZGF0YXNvdXJjZXMsZGFzaGJvYXJkc30KbWtkaXIgLXAgL2hvbWUvYXp1cmV1c2VyL2RvY2tlci90ZWxlZ3JhZi9ldGMKY2hvd24gLVIgYXp1cmV1c2VyOmRvY2tlciAvaG9tZS9henVyZXVzZXIvZG9ja2VyCmNhdCA8PEVPRiA+IC9ob21lL2F6dXJldXNlci9kb2NrZXIvY29uZmlndXJhdGlvbi5lbnYKIyBHcmFmYW5hIG9wdGlvbnMKR0ZfU0VDVVJJVFlfQURNSU5fVVNFUj1hZG1pbgpHRl9TRUNVUklUWV9BRE1JTl9QQVNTV09SRD1hZG1pbgpHRl9JTlNUQUxMX1BMVUdJTlM9CgojIEluZmx1eERCIG9wdGlvbnMKSU5GTFVYREJfREI9aW5mbHV4CklORkxVWERCX0FETUlOX1VTRVI9JChkYXRlICslcyB8IHNoYTI1NnN1bSB8IGJhc2U2NCB8IGhlYWQgLWMgOCA7IGVjaG8pCklORkxVWERCX0FETUlOX1BBU1NXT1JEPSQoZGF0ZSArJXMgfCBzaGEyNTZzdW0gfCBiYXNlNjQgfCBoZWFkIC1jIDEyIDsgZWNobykKRU9GCgpjYXQgPDxFT0YgPiAvaG9tZS9henVyZXVzZXIvZG9ja2VyL3RlbGVncmFmL2V0Yy90ZWxlZ3JhZi5jb25mCltnbG9iYWxfdGFnc10KClthZ2VudF0KICBpbnRlcnZhbCA9ICIzMHMiCiAgcm91bmRfaW50ZXJ2YWwgPSB0cnVlCiAgbWV0cmljX2J1ZmZlcl9saW1pdCA9IDEwMDAwCiAgZmx1c2hfYnVmZmVyX3doZW5fZnVsbCA9IHRydWUKICBjb2xsZWN0aW9uX2ppdHRlciA9ICIwcyIKICBmbHVzaF9pbnRlcnZhbCA9ICIxMHMiCiAgZmx1c2hfaml0dGVyID0gIjBzIgogIGRlYnVnID0gZmFsc2UKICBxdWlldCA9IGZhbHNlCiAgaG9zdG5hbWUgPSAiIgoKW1tvdXRwdXRzLmluZmx1eGRiXV0KICB1cmxzID0gWyJodHRwOi8vaW5mbHV4ZGI6ODA4NiJdICMgcmVxdWlyZWQKICBkYXRhYmFzZSA9ICJpbmZsdXgiICMgcmVxdWlyZWQKICBwcmVjaXNpb24gPSAicyIKICB0aW1lb3V0ID0gIjVzIgoKW1tpbnB1dHMuc3RhdHNkXV0KICBwcm90b2NvbCA9ICJ1ZHAiCiAgbWF4X3RjcF9jb25uZWN0aW9ucyA9IDI1MAogIHRjcF9rZWVwX2FsaXZlID0gZmFsc2UKICBzZXJ2aWNlX2FkZHJlc3MgPSAiOjgxMjUiCiAgZGVsZXRlX2dhdWdlcyA9IHRydWUKICBkZWxldGVfY291bnRlcnMgPSB0cnVlCiAgZGVsZXRlX3NldHMgPSB0cnVlCiAgZGVsZXRlX3RpbWluZ3MgPSB0cnVlCiAgcGVyY2VudGlsZXMgPSBbOTBdCiAgbWV0cmljX3NlcGFyYXRvciA9ICJfIgogIHBhcnNlX2RhdGFfZG9nX3RhZ3MgPSBmYWxzZQogIGFsbG93ZWRfcGVuZGluZ19tZXNzYWdlcyA9IDEwMDAwCiAgcGVyY2VudGlsZV9saW1pdCA9IDEwMDAKCltbaW5wdXRzLmNwdV1dCiAgcGVyY3B1ID0gdHJ1ZQogIHRvdGFsY3B1ID0gdHJ1ZQogIGZpZWxkZHJvcCA9IFsidGltZV8qIl0KICBjb2xsZWN0X2NwdV90aW1lID0gZmFsc2UKICByZXBvcnRfYWN0aXZlID0gZmFsc2UKCltbaW5wdXRzLmRpc2tdXQogIGlnbm9yZV9mcyA9IFsidG1wZnMiLCAiZGV2dG1wZnMiLCAiZGV2ZnMiLCAiaXNvOTY2MCIsICJvdmVybGF5IiwgImF1ZnMiLCAic3F1YXNoZnMiXQoKW1tpbnB1dHMuZGlza2lvXV0KCltbaW5wdXRzLmtlcm5lbF1dCgpbW2lucHV0cy5tZW1dXQoKW1tpbnB1dHMucHJvY2Vzc2VzXV0KCltbaW5wdXRzLnN3YXBdXQoKW1tpbnB1dHMuc3lzdGVtXV0KCltbaW5wdXRzLm5ldF1dCgpbW2lucHV0cy5uZXRzdGF0XV0KCltbaW5wdXRzLmludGVycnVwdHNdXQoKW1tpbnB1dHMubGludXhfc3lzY3RsX2ZzXV0KCltbaW5wdXRzLnBpbmddXQogIHVybHMgPSBbIiRETlMxIiwgIiRETlMyIiwgIiRETlMzIiwgIiRETlM0Il0KICBpbnRlcnZhbCA9ICIzMHMiCiAgY291bnQgPSA0CiAgcGluZ19pbnRlcnZhbCA9IDEuMAogIHRpbWVvdXQgPSAyLjAKRU9GCgpjYXQgPDxFT0YgPiAvaG9tZS9henVyZXVzZXIvZG9ja2VyL2dyYWZhbmEvcHJvdmlzaW9uaW5nL2RhdGFzb3VyY2VzL2RhdGFzb3VyY2UueW1sCmFwaVZlcnNpb246IDEKCmRlbGV0ZURhdGFzb3VyY2VzOgogIC0gbmFtZTogSW5mbHV4ZGIKICAgIG9yZ0lkOiAxCmRhdGFzb3VyY2VzOgogIC0gbmFtZTogSW5mbHV4REIKICAgIHR5cGU6IGluZmx1eGRiCiAgICBhY2Nlc3M6IHByb3h5CiAgICBvcmdJZDogMQogICAgdXJsOiBodHRwOi8vaW5mbHV4ZGI6ODA4NgogICAgcGFzc3dvcmQ6ICJhZG1pbiIKICAgIHVzZXI6ICJhZG1pbiIKICAgIGRhdGFiYXNlOiAiaW5mbHV4IgogICAgYmFzaWNBdXRoOiBmYWxzZQogICAgaXNEZWZhdWx0OiB0cnVlCiAgICBqc29uRGF0YToKICAgICAgdGltZUludGVydmFsOiAiMzBzIgogICAgdmVyc2lvbjogMQogICAgZWRpdGFibGU6IGZhbHNlCiAgLSBuYW1lOiBBenVyZSBNb25pdG9yCiAgICB0eXBlOiBncmFmYW5hLWF6dXJlLW1vbml0b3ItZGF0YXNvdXJjZQogICAgYWNjZXNzOiBwcm94eQogICAganNvbkRhdGE6CiAgICAgIGF6dXJlQXV0aFR5cGU6IG1zaQogICAgdmVyc2lvbjogMQpFT0YKCmNhdCA8PEVPRiA+IC9ob21lL2F6dXJldXNlci9kb2NrZXIvZ3JhZmFuYS9wcm92aXNpb25pbmcvZGFzaGJvYXJkcy9kYXNoYm9hcmQueW1sCmFwaVZlcnNpb246IDEKCnByb3ZpZGVyczoKLSBuYW1lOiAnZGFzaCcKICBvcmdJZDogMQogIGZvbGRlcjogJycKICB0eXBlOiBmaWxlCiAgZGlzYWJsZURlbGV0aW9uOiBmYWxzZQogIHVwZGF0ZUludGVydmFsU2Vjb25kczogMzAKICBvcHRpb25zOgogICAgcGF0aDogL3Zhci9saWIvZ3JhZmFuYS9kYXNoYm9hcmRzLwogICAgZm9sZGVyc0Zyb21GaWxlc1N0cnVjdHVyZTogdHJ1ZQpFT0YKCmdpdCBjbG9uZSBodHRwczovL2docF93bVNYdVVoMnc4aDV1NjNZNmEzQWVCVzVWbGhBRkszUzFYMkFAZ2l0aHViLmNvbS9WYWxjb24vTW9uaXRvcmluZy5naXQgL2hvbWUvYXp1cmV1c2VyL2RvY2tlci90ZW1wCm12IC9ob21lL2F6dXJldXNlci9kb2NrZXIvdGVtcC9BenVyZS9BenVyZS1kYXNoLmpzb24gL2hvbWUvYXp1cmV1c2VyL2RvY2tlci9ncmFmYW5hL2Rhc2hib2FyZHMvZGFzaC5qc29uCm12IC9ob21lL2F6dXJldXNlci9kb2NrZXIvdGVtcC9BenVyZS9ncmFmYW5hLWNvbmYgL2hvbWUvYXp1cmV1c2VyL2RvY2tlci9ncmFmYW5hL2RlZmF1bHRzLmluaQpybSAtcmYgL2hvbWUvYXp1cmV1c2VyL2RvY2tlci90ZW1wCgpjYXQgPDxFT0YgPiAvaG9tZS9henVyZXVzZXIvZG9ja2VyL2RvY2tlci1jb21wb3NlLnltbAp2ZXJzaW9uOiAnMy42JwpzZXJ2aWNlczoKICB0ZWxlZ3JhZjoKICAgIGltYWdlOiB0ZWxlZ3JhZjoxLjE4LWFscGluZQogICAgdm9sdW1lczoKICAgICAgLSAuL3RlbGVncmFmL2V0Yy90ZWxlZ3JhZi5jb25mOi9ldGMvdGVsZWdyYWYvdGVsZWdyYWYuY29uZjpybwogICAgZGVwZW5kc19vbjoKICAgICAgLSBpbmZsdXhkYgogICAgbGlua3M6CiAgICAgIC0gaW5mbHV4ZGIKICAgIHBvcnRzOgogICAgICAtICc4MTI1OjgxMjUvdWRwJwoKICBpbmZsdXhkYjoKICAgIGltYWdlOiBpbmZsdXhkYjoxLjgtYWxwaW5lCiAgICBlbnZfZmlsZTogY29uZmlndXJhdGlvbi5lbnYKICAgIHBvcnRzOgogICAgICAtICc4MDg2OjgwODYnCiAgICB2b2x1bWVzOgogICAgICAtIC4vOi9pbXBvcnRzCiAgICAgIC0gaW5mbHV4ZGJfZGF0YTovdmFyL2xpYi9pbmZsdXhkYgoKICBncmFmYW5hOgogICAgaW1hZ2U6IGdyYWZhbmEvZ3JhZmFuYTo5LjEuOAogICAgZGVwZW5kc19vbjoKICAgICAgLSBpbmZsdXhkYgogICAgZW52X2ZpbGU6IGNvbmZpZ3VyYXRpb24uZW52CiAgICBsaW5rczoKICAgICAgLSBpbmZsdXhkYgogICAgcG9ydHM6CiAgICAgIC0gJzgwOjMwMDAnCiAgICB2b2x1bWVzOgogICAgICAtIGdyYWZhbmFfZGF0YTovdmFyL2xpYi9ncmFmYW5hCiAgICAgIC0gLi9ncmFmYW5hL3Byb3Zpc2lvbmluZy86L2V0Yy9ncmFmYW5hL3Byb3Zpc2lvbmluZy8KICAgICAgLSAuL2dyYWZhbmEvZGFzaGJvYXJkcy86L3Zhci9saWIvZ3JhZmFuYS9kYXNoYm9hcmRzLwogICAgICAtIC4vZ3JhZmFuYS9kZWZhdWx0cy5pbmk6L3Vzci9zaGFyZS9ncmFmYW5hL2NvbmYvZGVmYXVsdHMuaW5pCgp2b2x1bWVzOgogIGdyYWZhbmFfZGF0YToge30KICBpbmZsdXhkYl9kYXRhOiB7fQpFT0YKCmRvY2tlci1jb21wb3NlIC1mIC9ob21lL2F6dXJldXNlci9kb2NrZXIvZG9ja2VyLWNvbXBvc2UueW1sIHVwIC1k",
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
+        "storageProfile": {
+          "osDisk": {
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "[variables('osDiskType')]"
+            }
+          },
+          "imageReference": {
+            "publisher": "Canonical",
+            "offer": "UbuntuServer",
+            "sku": "[parameters('ubuntuOSVersion')]",
+            "version": "latest"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('networkInterfaceName'))]"
+            }
+          ]
+        },
+        "osProfile": {
+          "computerName": "[parameters('vmName')]",
+          "adminUsername": "[parameters('adminUsername')]",
+          "adminPassword": "[parameters('adminPasswordOrKey')]",
+          "linuxConfiguration": "[if(equals(parameters('authenticationType'), 'password'), null(), variables('linuxConfiguration'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('networkInterfaceName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "adminUsername": {
+      "type": "string",
+      "value": "[parameters('adminUsername')]"
+    },
+    "hostname": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddressName'))).dnsSettings.fqdn]"
+    },
+    "sshCommand": {
+      "type": "string",
+      "value": "[format('ssh {0}@{1}', parameters('adminUsername'), reference(resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddressName'))).dnsSettings.fqdn)]"
+    }
+  }
+}
