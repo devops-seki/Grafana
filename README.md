@@ -1,4 +1,4 @@
-# AWS and Azure Monitoring
+![Grafana_for_AWS_and_Azure](https://github.com/senad-d/Grafana/assets/112484166/64edd04b-3633-478e-80b5-692717ae16a4)
 
 ### This is a solution for creating monitoring for AWS and Azure resources (fast and easy).
 
@@ -40,7 +40,11 @@ Run EC2 instance with Docker running containers: Grafana, InfluxDB and Telegraf.
 
 <details><summary> Video </summary>
 
-https://user-images.githubusercontent.com/114985182/205161844-48b09826-201c-4106-b981-9dbd79ee5975.mp4
+
+
+https://github.com/senad-d/Grafana/assets/112484166/2a40ba97-ef07-4b2b-9300-e99be738cafb
+
+
 
 </details>
 
@@ -125,7 +129,11 @@ ARM template for adding an VM with a fully automated bootstrap script to create 
 
 <details><summary> Video </summary>
 
-https://user-images.githubusercontent.com/114985182/205161932-5fcb91f8-4ccb-4be1-8571-c2ff3a062dab.mp4
+
+
+https://github.com/senad-d/Grafana/assets/112484166/2700ebf9-c64d-4bbc-a928-b4cd58ec348e
+
+
 
 </details>
 
