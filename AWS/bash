@@ -142,7 +142,7 @@ providers:
     foldersFromFilesStructure: true
 EOF
 
-git clone https://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@github.com/Valcon/Monitoring.git /home/ec2-user/temp
+git clone https://github.com/Monitoring.git /home/ec2-user/temp
 mv /home/ec2-user/temp/AWS/AWS-dash.json /home/ec2-user/docker/grafana/dashboards/dash.json
 mv /home/ec2-user/temp/AWS/grafana-conf /home/ec2-user/docker/grafana/defaults.ini
 rm -rf /home/ec2-user/temp

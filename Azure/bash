@@ -151,7 +151,7 @@ providers:
     foldersFromFilesStructure: true
 EOF
 
-git clone https://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@github.com/Valcon/Monitoring.git /home/azureuser/docker/temp
+git clone https://github.com/Monitoring.git /home/azureuser/docker/temp
 mv /home/azureuser/docker/temp/Azure/Azure-dash.json /home/azureuser/docker/grafana/dashboards/dash.json
 mv /home/azureuser/docker/temp/Azure/grafana-conf /home/azureuser/docker/grafana/defaults.ini
 rm -rf /home/azureuser/docker/temp
